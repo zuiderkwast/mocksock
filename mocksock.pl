@@ -13,6 +13,9 @@ use strict;
 use warnings;
 use Socket;
 
+#print (escape(unescape(escape("hello\r\nwho\tare\eyou?\n"))), "\n");
+#exit;
+
 my $role = "server";
 my $port = 4444;
 my $host = "localhost"; # used for client only
@@ -89,11 +92,11 @@ if ($role eq "server") {
 while (<>) {
     print "Command for $role: $_" if $debug;
     if (/^SEND (.*)/) {
-        my $data = eval "\"$1\""; # Expand escapes
+        my $data = unescape($1);
         print $connection $data;
         flush $connection;
     } elsif (/^RECV (.*)/) {
-        my $data = eval "\"$1\""; # Expand escapes
+        my $data = unescape($1);
         my $bytes_total = length $data;
         my $bytes_read = 0;
         for (my $offset = 0; $offset < $bytes_total; $offset += $bytes_read) {
@@ -104,7 +107,7 @@ while (<>) {
                 die "Unexpected EOF\n";
             }
             if ($buffer ne substr($data, $offset, $bytes_read)) {
-                die "Unexpected data received: $buffer\n";
+                die "Unexpected data received: " . escape($buffer) . "\n";
             }
         }
     } elsif (/^SLEEP (\d+)$/) {
@@ -114,9 +117,28 @@ while (<>) {
     } elsif (/^PEER CLOSED?$/) {
         my $buffer;
         my $bytes_read = read $connection, $buffer, 1;
-        die "Unexpected data from peer\n" if $bytes_read;
+        die "Data received from peer when closing is expected\n" if $bytes_read;
     } else {
         die "Unexpected command: $_\n";
     }
 }
 exit;
+
+sub escape_char {
+    $_ = shift;
+    return "\\r" if /\r/; # nicer than \x0d, etc.
+    return "\\n" if /\n/;
+    return "\\t" if /\t/;
+    return "\\\\" if /\\/;
+    return sprintf "\\x%02x", ord $_;
+}
+sub escape {
+    $_ = shift;
+    s/([^A-Za-z0-9\/\-_.,:;!?~\*'"()\^\$])/ escape_char $1 /eg;
+    return $_;
+}
+sub unescape {
+    $_ = shift;
+    s/\\([tnrfbae\\]|x\{[0-9a-fA-F]+\}|x[0-9a-fA-F]{1,2}|0[0-7]{0,2})/eval "\"\\$1\""/eg;
+    return $_;
+}
