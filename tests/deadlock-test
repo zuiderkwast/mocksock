@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# Copyright 2020 Ericsson Software Technology <viktor.soderqvist@est.tech>
+#
+# Copying and distribution of this file, with or without modification,
+# are permitted in any medium without royalty provided the copyright
+# notice and this notice are preserved.  This file is offered as-is,
+# without any warranty.
+
+port=6662
+
+printf '%s\n' 'SEND Hello' 'RECV bye\r\n' 'CLOSE' \
+    | timeout 1s perl ../mocksock.pl -p $port &
+server=$!
+
+printf '%s\n' 'RECV Hello!\r\n' 'SEND bye\r\n' 'PEER CLOSE' \
+    | timeout 1s perl ../mocksock.pl -c -p $port &
+client=$!
+
+wait $server;
+server_exit=$?
+
+wait $client;
+client_exit=$?
+
+# timeout exits with status 124 on timeout
+if [ $server_exit -ne 124 -o $client_exit -ne 124 ]
+then
+    echo "Server exit $server_exit, client exit $client_exit";
+    exit 1;
+fi
